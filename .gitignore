@@ -1,0 +1,12 @@
+config.yaml
+*.env
+.env*
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+generated-*.png
+/data/
+secrets/
+*.gpg
+.DS_Store

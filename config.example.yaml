@@ -1,0 +1,50 @@
+# Parlour Configuration
+# Copy to config.yaml and fill in your values.
+# Never commit config.yaml to the repository.
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  domain: your-domain.com        # Public domain (used for webhook URLs)
+  port: 3000                     # Registration server port
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# Secrets are loaded from `pass` by default.
+# Set provider: "env" to use environment variables instead.
+secrets:
+  provider: pass                 # "pass" or "env"
+  prefix: parlour/               # pass path prefix
+
+# ── Default Character Settings ────────────────────────────────────────────────
+defaults:
+  model: google/gemini-3-pro-preview
+  sandbox:
+    image: parlour-companion:latest
+    workspace_access: rw
+  tools:
+    - read
+    - write
+    - edit
+    - web_search
+    - image
+    - memory_search
+    - memory_get
+    - exec
+
+# ── Memory Pipeline ───────────────────────────────────────────────────────────
+memory:
+  idle_threshold_minutes: 30    # Session idle time before processing
+  min_messages: 10              # Minimum messages to trigger extraction
+  extraction_model: gemini-2.0-flash
+  embedding_model: gemini-embedding-001
+
+# ── Spontaneous Initiation ────────────────────────────────────────────────────
+spontaneous:
+  enabled: true
+  cron: "0 */2 * * *"           # Every 2 hours
+  base_probability: 0.08        # 8% base chance per check
+  min_cooldown_hours: 6
+  max_per_day: 1
+
+# ── Registration ──────────────────────────────────────────────────────────────
+registration:
+  mode: invite                  # "invite" | "open" | "closed"

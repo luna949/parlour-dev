@@ -1,0 +1,93 @@
+version: "3.9"
+
+# The Parlour — full stack
+# Usage:
+#   source ./load-secrets.sh
+#   docker compose up -d
+
+services:
+
+  # ─── Frontend (nginx static) ───────────────────────────────────────────────
+  frontend:
+    image: nginx:alpine
+    volumes:
+      - ./src/frontend:/usr/share/nginx/html:ro
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+  # ─── Registration backend ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3456
+      COMPANION_ADMIN_SECRET: ${ADMIN_SECRET}
+      ROBERTO_BOT_TOKEN: ${ROBERTO_BOT_TOKEN}
+      MARCUS_BOT_TOKEN: ${MARCUS_BOT_TOKEN}
+    volumes:
+      - ${HOME}/.openclaw-roberto/openclaw.json:/config/roberto.json:ro
+      - ${HOME}/.openclaw-marcus/openclaw.json:/config/marcus.json:ro
+      - ${HOME}/.openclaw-roberto:/home/claw/.openclaw-roberto
+      - ${HOME}/.openclaw-marcus:/home/claw/.openclaw-marcus
+    ports:
+      - "3456:3456"
+    restart: unless-stopped
+
+  # ─── Doorman bot ───────────────────────────────────────────────────────────
+  doorman:
+    build:
+      context: ./src/doorman
+      dockerfile: Dockerfile
+    environment:
+      DOORMAN_BOT_TOKEN: ${DOORMAN_BOT_TOKEN}
+      REGISTRATION_SERVER_URL: http://backend:3456
+      ADMIN_SECRET: ${ADMIN_SECRET}
+    restart: unless-stopped
+
+  # ─── Marcus gateway ────────────────────────────────────────────────────────
+  # NOTE: Docker socket mounted here so the GATEWAY can spin agent containers.
+  # The agent containers themselves NEVER get the socket — that would be full host compromise.
+  marcus-gateway:
+    image: openclaw/gateway:latest
+    environment:
+      OPENCLAW_CONFIG_PATH: /config/openclaw.json
+      OPENCLAW_STATE_DIR: /state
+    volumes:
+      - ${HOME}/.openclaw-marcus/openclaw.json:/config/openclaw.json:ro
+      - ${HOME}/.openclaw-marcus:/state
+      - /var/run/docker.sock:/var/run/docker.sock  # gateway only — never agents
+    ports:
+      - "18795:18795"
+    restart: unless-stopped
+
+  # ─── Roberto gateway ───────────────────────────────────────────────────────
+  # NOTE: Same rule — Docker socket for gateway use only, not passed into agent sandboxes.
+  roberto-gateway:
+    image: openclaw/gateway:latest
+    environment:
+      OPENCLAW_CONFIG_PATH: /config/openclaw.json
+      OPENCLAW_STATE_DIR: /state
+    volumes:
+      - ${HOME}/.openclaw-roberto/openclaw.json:/config/openclaw.json:ro
+      - ${HOME}/.openclaw-roberto:/state
+      - /var/run/docker.sock:/var/run/docker.sock  # gateway only — never agents
+    ports:
+      - "18790:18790"
+    restart: unless-stopped
+
+# ─── SECURITY RULES ────────────────────────────────────────────────────────
+# 1. Docker socket (/var/run/docker.sock) must NEVER be mounted in agent containers.
+#    It is only present on gateway services so they can spin sandboxed agent containers.
+#    Mounting it in an agent = full host compromise.
+#
+# 2. Agent containers run unprivileged (no --privileged flag, ever).
+#
+# 3. Writable mounts for agents are limited to their data/ directory.
+#    Personality files (SOUL.md, AGENTS.md, etc.) are mounted read-only (444 on host).
+#
+# 4. Roberto has exec tool (needed for image gen) — monitor for abuse.
+#    Marcus has no exec tool.
+#
+# 5. Neither agent has sessions_send — no cross-agent messaging.
